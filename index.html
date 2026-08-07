@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>三合一演示 - H5+APP联动</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family: -apple-system, "Microsoft Yahei", sans-serif; }
+    body { background:#f5f7fa; padding:20px; line-height:1.6; }
+    .card { background:#fff; border-radius:12px; padding:20px; margin-bottom:15px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    h1 { color:#222; font-size:20px; margin-bottom:10px; }
+    .info { color:#666; font-size:14px; margin:8px 0; }
+    .token-box { background:#eef5ff; padding:10px; border-radius:6px; word-break:break-all; font-size:12px; color:#0052d9; }
+    .btn { background:#0071ff; color:#fff; border:none; padding:10px 16px; border-radius:8px; font-size:15px; margin:5px; cursor:pointer; }
+    .btn:active { opacity:0.8; }
+    .status { padding:8px 12px; border-radius:6px; font-size:14px; margin-top:10px; }
+    .status.ok { background:#e6ffed; color:#009e5f; }
+    .status.no { background:#fff2f2; color:#e53e3e; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>📱 H5 + APP 联动演示</h1>
+    <p class="info" id="envText">运行环境：检测中...</p>
+    <p class="info">登录状态：<span id="loginStatus">未登录</span></p>
+  </div>
+
+  <div class="card">
+    <h3>🔐 自动登录联动（核心）</h3>
+    <p class="info">APP传入Token：</p>
+    <div class="token-box" id="tokenDisplay">暂无</div>
+    <p class="info">说明：APP打开H5会自动带入Token → H5免登录，完全联动！</p>
+  </div>
+
+  <div class="card">
+    <h3>🔧 H5调用APP原生能力（JSBridge）</h3>
+    <button class="btn" onclick="callAppGetUser()">获取APP用户信息</button>
+    <button class="btn" onclick="callAppShare()">调用APP分享</button>
+    <div id="bridgeResult" class="status no">等待调用...</div>
+  </div>
+
+<script>
+// ========== 1. 自动读取APP传入Token → 实现免登录 ==========
+const getUrlParam = name => new URLSearchParams(location.search).get(name);
+const TOKEN = getUrlParam('token') || localStorage.getItem('app_token');
+
+if (TOKEN) {
+  localStorage.setItem('app_token', TOKEN);
+  document.getElementById('tokenDisplay').innerText = TOKEN;
+  document.getElementById('loginStatus').innerText = '✅ 已登录（APP自动同步）';
+  document.getElementById('loginStatus').style.color = '#009e5f';
+}
+
+// ========== 2. 检测运行环境：网页 / Android / iOS APP ==========
+const isAndroidAPP = window.Android !== undefined;
+const isIOSAPP = window.webkit?.messageHandlers !== undefined;
+const envText = isAndroidAPP ? '📱 Android APP（内嵌H5）' :
+                isIOSAPP    ? '📱 iOS APP（内嵌H5）' :
+                              '🌐 普通网页浏览器';
+document.getElementById('envText').innerText = `运行环境：${envText}`;
+
+// ========== 3. H5调用APP原生能力（JSBridge 双向通信）==========
+function callAppGetUser() {
+  const resultBox = document.getElementById('bridgeResult');
+  if (isAndroidAPP) {
+    const user = JSON.parse(window.Android?.getUserInfo?.() || '{}');
+    resultBox.className = 'status ok';
+    resultBox.innerText = `✅ 调用成功：${user.name || 'APP返回用户'}`;
+  } else if (isIOSAPP) {
+    window.webkit.messageHandlers.getUserInfo.postMessage({});
+    resultBox.innerText = '📤 已发送iOS请求...';
+  } else {
+    resultBox.innerText = '⚠️ 仅在APP内可用（网页端演示通过）';
+  }
+}
+
+function callAppShare() {
+  if (isAndroidAPP) window.Android?.share?.('三合一演示', '快来体验H5+APP联动！');
+  else if (isIOSAPP) window.webkit.messageHandlers.share.postMessage({title:'三合一演示'});
+  else alert('📤 分享功能（APP内会调用原生分享）');
+}
+
+// ========== 4. APP调用H5的回调方法（供原生主动通知H5）==========
+window.APP_CALLBACK = {
+  onLoginSuccess: function(token) {
+    localStorage.setItem('app_token', token);
+    location.search = `?token=${token}`; // 刷新H5自动登录
+  },
+  onReceiveUser: function(userJson) {
+    console.log('APP返回用户：', JSON.parse(userJson));
+  }
+};
+</script>
+</body>
+</html>
